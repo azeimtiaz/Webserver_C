@@ -55,7 +55,9 @@ void http_header(int, const char *);
 void cat(int, FILE *);
 void bad_request(int);
 void cannot_exec(int);
-int get_file_size(int fd);
+int get_file_size(int);
+void php_cgi(const char *, int);
+void php_headers(int, const char *);
 
 /***
  * Prints error and terminates program
@@ -300,8 +302,10 @@ void send_file(int client, const char *filename) {
         for(int i=0; extensions[i].ext != NULL; i++) {
             if(strcmp(s+1, extensions[i].ext) == 0) {
                 if(strcmp(extensions[i].ext, "php") == 0) {
-                printf("PHP file");
-                // exit(1);
+                printf("PHP file\n");
+                php_cgi(filename, client);
+                sleep(1);
+                close(fd1);
                 } else if(strcmp(extensions[i].ext, "html") == 0) {
                     http_header(client, filename);
                 }
@@ -322,20 +326,6 @@ void send_file(int client, const char *filename) {
         printf("File %s, Sent %i\n", filename, bytes_sent);
         close(fd1);
     }
-
-    // buffer[0] = 'A'; buffer[1] = '\0';
-
-    // while((numchars > 0) && strcmp("\n", buffer))
-    //     numchars = read_line(client, buffer);
-
-    // resource = fopen(filename, "r");
-    // if(resource == NULL)
-    //     not_found(client);
-    // else {
-    //     http_header(client, filename);
-    //     cat(client, resource);
-    // }
-    // fclose(resource);
 }
 
 void exec_cgi(int client, const char *path, const char *method, const char *queryStr) {
@@ -406,10 +396,10 @@ void exec_cgi(int client, const char *path, const char *method, const char *quer
             sprintf(length_env, "CONTENT_LENGTH=%d", cont_len);     // create environment variable for content length
             putenv(length_env);
         }
-
-        execl(path, path, NULL);        // execute shell script
+     
+        putenv("REDIRECT_STATUS=true");
+        execl("/usr/bin/php-cgi", "php-cgi", NULL);     // execute shell script
         exit(0);
-
     } else {            // Parent CGI script
         close(cgi_output[1]);
         close(cgi_input[0]);
@@ -483,6 +473,31 @@ int get_file_size(int fd) {
     return (int) stat_struct.st_size;
 }
 
+void php_cgi(const char *path, int fd) {
+    printf("PHP Script\n");
+    php_headers(fd, path);
+    dup2(fd, STDOUT_FILENO);
+    char script[500];
+    strcpy(script, "SCRIPT_FILENAME=");
+    strcat(script, path);
+    putenv("GATEWAY_INTERFACE=CGI/1.1");
+    putenv(script);
+    putenv("QUERY_STRING=");
+    putenv("REQUEST_METHOD=GET");
+    putenv("REDIRECT_STATUS=true");
+    putenv("SERVER_PROTOCOL=HTTP/1.1");
+    putenv("REMOTE_HOST=127.0.0.1");
+    execl("/usr/bin/php-cgi", "php-cgi", NULL);
+}
+
+void php_headers(int client, const char *filename) {
+    char buf[1024];
+    (void)filename;
+    strcpy(buf, "HTTP/1.1 200 OK\n Server: Web Server in C\n Connection: close\n");
+    send(client, buf, strlen(buf),0);
+}
+
+
 int main(void) {
 
     int serv_sock = -1;
@@ -503,6 +518,5 @@ int main(void) {
     }
     
     close(serv_sock);
-    // close(cli_sock);
     return 0;
 }
