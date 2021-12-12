@@ -1,3 +1,16 @@
+/***
+ * This is a simple webserver developed in C.
+ * The server renders, various file types including images, gifs, html as well as php files,
+ * and supports dynamic rendering.
+ * 
+ * @author Azma Imtiaz - 19020368
+ * 
+ * To run:  Compile and run the file, and the program will print the port number on the terminal
+ *          Visit http://127.0.0.1:<PORT_NUMBER>/ to view the index.html file in the root folder
+ *          http://127.0.0.1:<PORT_NUMBER>/Project1/index.html to view files in Project1 folder within root
+ ***/
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -55,7 +68,9 @@ void http_header(int, const char *);
 void cat(int, FILE *);
 void bad_request(int);
 void cannot_exec(int);
-int get_file_size(int fd);
+int get_file_size(int);
+void php_cgi(const char *, int);
+void php_headers(int, const char *);
 
 /***
  * Prints error and terminates program
@@ -66,6 +81,11 @@ void error(const char *msg) {
     exit(1);
 }
 
+/***
+ * This function initiates a connection to this webserver through the specified port
+ * @param pointer to the variable containing the port number
+ * @return the socket
+ ***/
 int init_connect(unsigned short *port) {
     int sockfd=0;
     struct sockaddr_in serv_addr;
@@ -97,6 +117,10 @@ int init_connect(unsigned short *port) {
     return(sockfd);
 }
 
+/***
+ * This function accepts & processes requests from clients
+ * @param the client socket
+ ***/
 void accept_req(int client) {
     
     char buffer[BUF_SIZE];
@@ -205,6 +229,12 @@ void accept_req(int client) {
     close(client);
 }
 
+/***
+ * This function reads a line from the socket until it reaches a newline character
+ * If no newline character is found before the 
+ * @param the client socket, pointer to the buffer
+ * @return number of bytes stored
+ ***/
 int read_line(int client, char *buffer) {
     int i = 0;
     char c = '\0';
@@ -230,6 +260,10 @@ int read_line(int client, char *buffer) {
     return(i);
 }
 
+/***
+ * Informs the client that the requested method has not been implemented 
+ * @param the client socket
+ ***/
 void cannot_implement(int client) {
     char buffer[BUF_SIZE];
 
@@ -251,6 +285,10 @@ void cannot_implement(int client) {
     send(client, buffer, strlen(buffer), 0);
 }
 
+/***
+ * Informs the client that the requested file has not been found (404) 
+ * @param the client socket
+ ***/
 void not_found(int client) {
     char buffer[BUF_SIZE];
 
@@ -274,6 +312,10 @@ void not_found(int client) {
     send(client, buffer, strlen(buffer), 0);
 }
 
+/***
+ * This function opens the file to be read
+ * @param the client socket, pointer to the filename
+ ***/
 void send_file(int client, const char *filename) {
     FILE *resource = NULL;
     int numchars = 1;
@@ -300,8 +342,10 @@ void send_file(int client, const char *filename) {
         for(int i=0; extensions[i].ext != NULL; i++) {
             if(strcmp(s+1, extensions[i].ext) == 0) {
                 if(strcmp(extensions[i].ext, "php") == 0) {
-                printf("PHP file");
-                // exit(1);
+                printf("PHP file\n");
+                php_cgi(filename, client);
+                sleep(1);
+                close(fd1);
                 } else if(strcmp(extensions[i].ext, "html") == 0) {
                     http_header(client, filename);
                 }
@@ -322,22 +366,12 @@ void send_file(int client, const char *filename) {
         printf("File %s, Sent %i\n", filename, bytes_sent);
         close(fd1);
     }
-
-    // buffer[0] = 'A'; buffer[1] = '\0';
-
-    // while((numchars > 0) && strcmp("\n", buffer))
-    //     numchars = read_line(client, buffer);
-
-    // resource = fopen(filename, "r");
-    // if(resource == NULL)
-    //     not_found(client);
-    // else {
-    //     http_header(client, filename);
-    //     cat(client, resource);
-    // }
-    // fclose(resource);
 }
 
+/***
+ * Executes a CGI script 
+ * @param the client socket, path to CGI script, pointer to method, pointer to query string
+ ***/
 void exec_cgi(int client, const char *path, const char *method, const char *queryStr) {
     char buffer[1024];
     int cgi_output[2];
@@ -406,10 +440,10 @@ void exec_cgi(int client, const char *path, const char *method, const char *quer
             sprintf(length_env, "CONTENT_LENGTH=%d", cont_len);     // create environment variable for content length
             putenv(length_env);
         }
-
-        execl(path, path, NULL);        // execute shell script
+     
+        putenv("REDIRECT_STATUS=true");
+        execl("/usr/bin/php-cgi", "php-cgi", NULL);     // execute shell script
         exit(0);
-
     } else {            // Parent CGI script
         close(cgi_output[1]);
         close(cgi_input[0]);
@@ -483,6 +517,31 @@ int get_file_size(int fd) {
     return (int) stat_struct.st_size;
 }
 
+void php_cgi(const char *path, int fd) {
+    printf("PHP Script\n");
+    php_headers(fd, path);
+    dup2(fd, STDOUT_FILENO);
+    char script[500];
+    strcpy(script, "SCRIPT_FILENAME=");
+    strcat(script, path);
+    putenv("GATEWAY_INTERFACE=CGI/1.1");
+    putenv(script);
+    putenv("QUERY_STRING=");
+    putenv("REQUEST_METHOD=GET");
+    putenv("REDIRECT_STATUS=true");
+    putenv("SERVER_PROTOCOL=HTTP/1.1");
+    putenv("REMOTE_HOST=127.0.0.1");
+    execl("/usr/bin/php-cgi", "php-cgi", NULL);
+}
+
+void php_headers(int client, const char *filename) {
+    char buf[1024];
+    (void)filename;
+    strcpy(buf, "HTTP/1.1 200 OK\n Server: Web Server in C\n Connection: close\n");
+    send(client, buf, strlen(buf),0);
+}
+
+
 int main(void) {
 
     int serv_sock = -1;
@@ -503,6 +562,5 @@ int main(void) {
     }
     
     close(serv_sock);
-    // close(cli_sock);
     return 0;
 }
