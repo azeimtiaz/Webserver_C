@@ -1,3 +1,16 @@
+/***
+ * This is a simple webserver developed in C.
+ * The server renders, various file types including images, gifs, html as well as php files,
+ * and supports dynamic rendering.
+ * 
+ * @author Azma Imtiaz - 19020368
+ * 
+ * To run:  Compile and run the file, and the program will print the port number on the terminal
+ *          Visit http://127.0.0.1:<PORT_NUMBER>/ to view the index.html file in the root folder
+ *          http://127.0.0.1:<PORT_NUMBER>/Project1/index.html to view files in Project1 folder within root
+ ***/
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -68,6 +81,11 @@ void error(const char *msg) {
     exit(1);
 }
 
+/***
+ * This function initiates a connection to this webserver through the specified port
+ * @param pointer to the variable containing the port number
+ * @return the socket
+ ***/
 int init_connect(unsigned short *port) {
     int sockfd=0;
     struct sockaddr_in serv_addr;
@@ -99,6 +117,10 @@ int init_connect(unsigned short *port) {
     return(sockfd);
 }
 
+/***
+ * This function accepts & processes requests from clients
+ * @param the client socket
+ ***/
 void accept_req(int client) {
     
     char buffer[BUF_SIZE];
@@ -207,6 +229,12 @@ void accept_req(int client) {
     close(client);
 }
 
+/***
+ * This function reads a line from the socket until it reaches a newline character
+ * If no newline character is found before the 
+ * @param the client socket, pointer to the buffer
+ * @return number of bytes stored
+ ***/
 int read_line(int client, char *buffer) {
     int i = 0;
     char c = '\0';
@@ -232,6 +260,10 @@ int read_line(int client, char *buffer) {
     return(i);
 }
 
+/***
+ * Informs the client that the requested method has not been implemented 
+ * @param the client socket
+ ***/
 void cannot_implement(int client) {
     char buffer[BUF_SIZE];
 
@@ -253,6 +285,10 @@ void cannot_implement(int client) {
     send(client, buffer, strlen(buffer), 0);
 }
 
+/***
+ * Informs the client that the requested file has not been found (404) 
+ * @param the client socket
+ ***/
 void not_found(int client) {
     char buffer[BUF_SIZE];
 
@@ -276,6 +312,10 @@ void not_found(int client) {
     send(client, buffer, strlen(buffer), 0);
 }
 
+/***
+ * This function opens the file to be read
+ * @param the client socket, pointer to the filename
+ ***/
 void send_file(int client, const char *filename) {
     FILE *resource = NULL;
     int numchars = 1;
@@ -328,6 +368,10 @@ void send_file(int client, const char *filename) {
     }
 }
 
+/***
+ * Executes a CGI script 
+ * @param the client socket, path to CGI script, pointer to method, pointer to query string
+ ***/
 void exec_cgi(int client, const char *path, const char *method, const char *queryStr) {
     char buffer[1024];
     int cgi_output[2];
